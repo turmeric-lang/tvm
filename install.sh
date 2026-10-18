@@ -62,8 +62,8 @@ tvm installed.
       . "$TVM_DIR/tvm.sh"
 
   Then:
-      tvm install 0.23.1
-      tvm use 0.23.1
+      tvm ls-remote                      # list the released versions
+      tvm install --activate <version>   # install one and make it the default
       tur --version
 
 EOF
