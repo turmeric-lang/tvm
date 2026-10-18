@@ -1,0 +1,21 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    name: tvm (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      # The suite asserts `tvm current` is `none` before anything is installed,
+      # which a tur already on PATH would contradict.
+      - name: Check no tur is already on PATH
+        run: |
+          if command -v tur >/dev/null 2>&1; then
+            echo "::error::a tur is already on PATH ($(command -v tur)); the suite assumes none"
+            exit 1
+          fi
+      - run: sh tests/run.sh
