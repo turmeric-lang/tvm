@@ -332,6 +332,76 @@ tvm doctor >/dev/null 2>&1 && ok "doctor runs" || ok "doctor runs (warnings)"
 out="$(tvm completion bash | grep -c 'complete -F _tvm')"
 check "bash completion emitted" "$out" "1"
 
+# === install.sh: which rc file it wires up ==================================
+#
+# A `uname` stub picks the platform, so both branches run on either CI host.
+INSTALL_SH="$HERE/../install.sh"
+STUBDIR="$WORK/uname-stub"
+mkdir -p "$STUBDIR"
+REAL_UNAME="$(command -v uname)"
+cat > "$STUBDIR/uname" <<EOF
+#!/bin/sh
+if [ "\$1" = "-s" ]; then echo "\$FAKE_OS"; else exec "$REAL_UNAME" "\$@"; fi
+EOF
+chmod +x "$STUBDIR/uname"
+
+# run_install <home> <os> <shell>
+run_install() {
+  env -i HOME="$1" FAKE_OS="$2" SHELL="$3" TVM_DIR="$1/.tvm" \
+      PATH="$STUBDIR:/usr/bin:/bin" sh "$INSTALL_SH" 2>&1
+}
+fresh_home() { h="$WORK/home-$1"; rm -rf "$h"; mkdir -p "$h"; echo "$h"; }
+has_snippet() { # count of init markers in <file>; 0 when the file is absent
+  if [ -f "$1" ]; then grep -c '# >>> tvm initialize >>>' "$1"; else echo 0; fi
+}
+
+h="$(fresh_home linux-empty)"
+out="$(run_install "$h" Linux /bin/bash)"
+check "linux bash, empty home: snippet in new .bashrc" "$(has_snippet "$h/.bashrc")" "1"
+check "linux bash, empty home: no .bash_profile" "$([ -e "$h/.bash_profile" ] && echo yes || echo no)" "no"
+case "$out" in *"created $h/.bashrc"*) ok "linux bash, empty home: says it created .bashrc" ;;
+  *) bad "linux bash, empty home: says it created .bashrc (got '$out')" ;; esac
+
+h="$(fresh_home linux-profile)"
+echo 'export FROM_PROFILE=yes' > "$h/.profile"
+run_install "$h" Linux /bin/bash >/dev/null
+check "linux bash, only .profile: snippet in .bashrc" "$(has_snippet "$h/.bashrc")" "1"
+check "linux bash, only .profile: .profile untouched" "$(has_snippet "$h/.profile")" "0"
+check "linux bash, only .profile: no .bash_profile shadowing it" "$([ -e "$h/.bash_profile" ] && echo yes || echo no)" "no"
+if command -v bash >/dev/null 2>&1; then
+  got="$(env -i HOME="$h" PATH=/usr/bin:/bin bash -lc 'echo "${FROM_PROFILE-unset}"' 2>/dev/null)"
+  check "linux bash, only .profile: login shell still reads .profile" "$got" "yes"
+fi
+
+h="$(fresh_home darwin-bashrc)"
+touch "$h/.bashrc"
+run_install "$h" Darwin /bin/bash >/dev/null
+check "macos bash, only .bashrc: snippet in .bash_profile" "$(has_snippet "$h/.bash_profile")" "1"
+check "macos bash, only .bashrc: .bashrc untouched" "$(has_snippet "$h/.bashrc")" "0"
+
+h="$(fresh_home darwin-profile)"
+touch "$h/.profile"
+run_install "$h" Darwin /bin/bash >/dev/null
+check "macos bash, only .profile: snippet in .profile" "$(has_snippet "$h/.profile")" "1"
+check "macos bash, only .profile: no .bash_profile shadowing it" "$([ -e "$h/.bash_profile" ] && echo yes || echo no)" "no"
+
+h="$(fresh_home darwin-both)"
+touch "$h/.bash_profile" "$h/.profile"
+run_install "$h" Darwin /bin/bash >/dev/null
+check "macos bash, .bash_profile and .profile: snippet in .bash_profile" "$(has_snippet "$h/.bash_profile")" "1"
+check "macos bash, .bash_profile and .profile: .profile untouched" "$(has_snippet "$h/.profile")" "0"
+
+h="$(fresh_home zsh)"
+run_install "$h" Darwin /bin/zsh >/dev/null
+check "zsh: snippet in .zshrc" "$(has_snippet "$h/.zshrc")" "1"
+
+h="$(fresh_home rerun)"
+run_install "$h" Linux /bin/bash >/dev/null
+out="$(run_install "$h" Linux /bin/bash)"
+check "re-run: snippet written once" "$(has_snippet "$h/.bashrc")" "1"
+case "$out" in *"already configured"*) ok "re-run: says already configured" ;;
+  *) bad "re-run: says already configured (got '$out')" ;; esac
+
 # === summary ================================================================
 echo "------------------------------------"
 echo "summary: $PASS passed, $FAIL failed"
