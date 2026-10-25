@@ -24,8 +24,10 @@ sh install.sh
 ```
 
 This copies `tvm.sh` into `$TVM_DIR` (default `~/.tvm`) and appends an init
-snippet to your shell rc (`~/.zshrc`, `~/.bashrc`, or `~/.profile`). Open a
-new shell, or source it directly:
+snippet to your shell rc: `~/.zshrc` for zsh; for bash, `~/.bashrc` on Linux
+(created if missing) and on macOS the first of `~/.bash_profile`,
+`~/.bash_login`, `~/.profile` that exists (else a new `~/.bash_profile`);
+`~/.profile` for any other shell. Open a new shell, or source it directly:
 
 ```sh
 export TVM_DIR="$HOME/.tvm"
